@@ -134,17 +134,20 @@ Status Kmeans<DType>::predict(std::vector<std::vector<DType>> &data_points,
   if (n_thread_ > 1) {
     LOG(DEBUG) << "parallel predicting using " << n_thread_ << " threads";
     Status ret = Status::OK;
-#pragma omp parallel for ordered num_threads(n_thread_)
-    for (size_t i = 0; i < data_points.size(); ++i) {
-      int label;
-      DType min_dist;
-      auto r = predict(data_points[i], min_dist, label);
-      if (r != Status::OK) {
-        ret = r;
-        LOG(ERROR) << "data point " << i << " has inconsistent dimension";
+    labels.resize(data_points.size());
+#pragma omp parallel num_threads(n_thread_)
+    {
+#pragma omp for
+      for (size_t i = 0; i < data_points.size(); ++i) {
+        int label;
+        DType min_dist;
+        auto r = predict(data_points[i], min_dist, label);
+        if (r != Status::OK) {
+          ret = r;
+          LOG(ERROR) << "data point " << i << " has inconsistent dimension";
+        }
+        labels[i] = label;
       }
-#pragma omp ordered
-      labels.push_back(label);
     }
     if (ret != Status::OK) {
       return ret;
