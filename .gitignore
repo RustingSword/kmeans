@@ -1,0 +1,10 @@
+*.o
+bin/
+
+# debug symbols on macOS
+*.dSYM
+
+# output files
+test_model
+kmeans.labels
+kmeans.model
