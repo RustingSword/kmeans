@@ -2,19 +2,19 @@
 #include "utils.h"
 #include <iostream>
 int main(int argc, char **argv) {
-    if (argc != 4) {
-        std::cerr << "Usage: " << argv[0]
-            << " <data> <num_cluster> <num_threads>" << std::endl;
-        return -1;
-    }
     log_level = DEBUG;
+    if (argc != 4) {
+        LOG(ERROR) << "Usage: " << argv[0]
+            << " <data> <num_cluster> <num_threads>";
+        return 0;
+    }
     cluster::Kmeans<float> kmeans;
     int num_cluster = atoi(argv[2]);
     int num_threads = atoi(argv[3]);
     if (num_cluster <= 0 || num_threads <= 0) {
         LOG(ERROR) << "both num_cluster and num_threads should be positive "
             "integers";
-        return 0;
+        return -1;
     }
     if (num_cluster > 500) {
         kmeans.set_init_method(cluster::InitMethod::RANDOM);
