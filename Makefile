@@ -4,7 +4,7 @@ ifeq ($(UNAME_S), Darwin)
 else
 	CXX = g++
 endif
-CXXFLAGS = -fopenmp -std=c++11 -Wall -Wfatal-errors -O2
+CXXFLAGS = -fopenmp -std=c++11 -Wall -Wfatal-errors -march=native -O2
 INCLUDEFLAGS = -I include
 
 INCLUDE_DIR = include

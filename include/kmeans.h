@@ -8,9 +8,9 @@
 
 namespace cluster {
 
-enum class InitMethod { RANDOM, KMEANS_PLUSPLUS };
+enum class InitMethod { RANDOM, KMEANS_PLUSPLUS, KMEANS_PARALLEL };
 enum class Status { OK, IO_ERROR, DIM_ERROR };
-extern const char* init_methods[2];
+extern const char* init_methods[3];
 
 template <typename DType>
 class Kmeans {
@@ -78,6 +78,7 @@ class Kmeans {
 
     Status random_init(std::vector<std::vector<DType>> &data);
     Status kmeans_plusplus_init(std::vector<std::vector<DType>> &data);
+    Status kmeans_parallel_init(std::vector<std::vector<DType>> &data);
     Status sequential_lloyd(std::vector<std::vector<DType>> &data, DType &cost);
     Status parallel_lloyd(std::vector<std::vector<DType>> &data, DType &cost);
 };  // class Kmeans

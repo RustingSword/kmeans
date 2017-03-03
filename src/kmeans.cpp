@@ -14,7 +14,7 @@
 LogLevel log_level = INFO;
 namespace cluster {
 
-const char* init_methods[2] = {"random", "k-means++"};
+const char* init_methods[3] = {"random", "k-means++", "k-means||"};
 
 template <typename DType>
 Kmeans<DType>::Kmeans(int n_cluster, int n_thread, int n_iter, float threshold,

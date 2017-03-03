@@ -3,7 +3,9 @@
 Yet another wheel.
 
 # Usage
+
 ## Cluster
+
     $ make
     g++-6 -fopenmp -std=c++11 -Wall -Wfatal-errors -O2 -I include -c src/kmeans.cpp -o src/kmeans.o
     mkdir -p bin
