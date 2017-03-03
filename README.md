@@ -39,4 +39,4 @@ Yet another wheel.
     ./tools/plot_cluster.py data/test_data kmeans.labels kmeans.model
 
 sample result:
-![cluster result](/clusters.png)
+![cluster result](clusters.png)
