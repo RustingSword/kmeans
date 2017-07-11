@@ -20,7 +20,8 @@ template <typename DType>
 Kmeans<DType>::Kmeans(int n_cluster, int n_thread, int n_iter, float threshold,
     InitMethod init) :
   n_cluster_(n_cluster), n_thread_(n_thread), n_iter_(n_iter),
-  threshold_(threshold), init_(init), num_reassigned_(0) {
+  threshold_(threshold), init_(init), kmeans_parallel_l_(2 * n_cluster),
+  kmeans_parallel_r_(2), num_reassigned_(0) {
 }
 
 template <typename DType>
@@ -45,7 +46,7 @@ Status Kmeans<DType>::load_data(const char *filename,
   data.clear();
 
   std::string line;
-  while (getline(fin, line)) {
+  while (std::getline(fin, line)) {
     auto sample = parse_sample_from_string(line);
     data.push_back(sample);
   }
@@ -194,6 +195,12 @@ Status Kmeans<DType>::init(std::vector<std::vector<DType>> &data) {
         return ret;
       }
       break;
+    case InitMethod::KMEANS_PARALLEL:
+      ret = kmeans_parallel_init(data);
+      if (ret != Status::OK) {
+        return ret;
+      }
+      break;
     default:
       break;
   }
@@ -233,7 +240,8 @@ Status Kmeans<DType>::random_init(std::vector<std::vector<DType>> &data) {
 }
 
 template <typename DType>
-Status Kmeans<DType>::kmeans_plusplus_init(std::vector<std::vector<DType>> &data) {
+Status Kmeans<DType>::kmeans_plusplus_init(
+    std::vector<std::vector<DType>> &data) {
   std::set<int> indices;
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -248,7 +256,6 @@ Status Kmeans<DType>::kmeans_plusplus_init(std::vector<std::vector<DType>> &data
 
   // sample rest n_cluster_ - 1 centers
   for (int i = 1; i < n_cluster_; ++i) {
-    LOG(DEBUG) << "sampling center " << i;
     DType sum_dists = 0.0;
     auto ret = Status::OK;
 #pragma omp parallel for num_threads(n_thread_) reduction(+:sum_dists)
@@ -294,6 +301,61 @@ Status Kmeans<DType>::kmeans_plusplus_init(std::vector<std::vector<DType>> &data
 }
 
 template <typename DType>
+Status Kmeans<DType>::kmeans_parallel_init(
+    std::vector<std::vector<DType>> &data) {
+  std::set<int> indices;
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<DType> dis(0.0, 1.0);
+  std::vector<std::vector<DType>> candidate_centers;
+
+  // randomly sample first center
+  indices.insert(static_cast<int>(dis(gen) * data.size()));
+
+  std::vector<DType> dists(data.size());
+
+  int num_pass = 0;
+  while (num_pass < kmeans_parallel_r_) {
+    DType sum_dists = 0.0;
+    auto ret = Status::OK;
+#pragma omp parallel for num_threads(n_thread_) reduction(+:sum_dists)
+    for (int j = 0; j < static_cast<int>(data.size()); ++j) {
+      DType cur_dist = 0.0, min_dist = std::numeric_limits<DType>::max();
+      for (auto id : indices) {
+        auto status = dist(data[j], data[id], cur_dist);
+        if (status != Status::OK) {
+          ret = status;
+        }
+        if (cur_dist < min_dist) {
+          min_dist = cur_dist;
+        }
+      }
+      sum_dists += min_dist;
+      dists[j] = min_dist;
+    }
+    if (ret != Status::OK) {
+      return ret;
+    }
+    for (int j = 0; j < static_cast<int>(data.size()); ++j) {
+      DType prob = dis(gen);
+      if (prob < kmeans_parallel_l_ * dists[j] / sum_dists) {
+        indices.insert(j);
+      }
+    }
+    num_pass++;
+  }
+
+  // recluster sampled points into k clusters
+  for (auto index : indices) {
+    candidate_centers.push_back(data[index]);
+  }
+  kmeans_plusplus_init(candidate_centers);
+  fit(candidate_centers, true);
+
+  return Status::OK;
+}
+
+template <typename DType>
 Status Kmeans<DType>::fit(const char *input_file) {
   std::vector<std::vector<DType>> data;
   LOG(INFO) << "loading data from " << input_file;
@@ -305,14 +367,16 @@ Status Kmeans<DType>::fit(const char *input_file) {
 }
 
 template <typename DType>
-Status Kmeans<DType>::fit(std::vector<std::vector<DType>> &data) {
+Status Kmeans<DType>::fit(std::vector<std::vector<DType>> &data, bool seeded) {
   LOG(INFO) << "fitting data with n=" << data.size()
     << " d=" << data[0].size()
     << " k=" << n_cluster_;
-  LOG(INFO) << "seeding centers...";
-  auto ret = init(data);
-  if (ret != Status::OK) {
-    return ret;
+  if (!seeded) {
+    LOG(INFO) << "seeding centers...";
+    auto ret = init(data);
+    if (ret != Status::OK) {
+      return ret;
+    }
   }
 
   LOG(INFO) << "start clustering...";
@@ -361,6 +425,7 @@ Status Kmeans<DType>::sequential_lloyd(std::vector<std::vector<DType>> &data,
 
   // update centers
   for (int i = 0; i < n_cluster_; ++i) {
+    LOG(VERBOSE) << "cluster " << i << " #samples " << center_ids_[i].size();
     std::vector<DType> center(data[0].size());
     for (auto id : center_ids_[i]) {  // iterate over members of cluster[i]
       for (size_t j = 0; j < data[id].size(); ++j) {
@@ -381,10 +446,12 @@ Status Kmeans<DType>::sequential_lloyd(std::vector<std::vector<DType>> &data,
 template <typename DType>
 Status Kmeans<DType>::parallel_lloyd(std::vector<std::vector<DType>> &data,
     DType &total_cost) {
-  total_cost = 0;
   // Older OpenMP cannot carry out reduction on class member (num_reassigned_
   // here), we need to use a temporary vector to accumulate this in each thread.
+  // Also, we cannot directly reduce on total_cost, which is a reference type and
+  // not supported by OpenMP <= 3.1, thus we use a local `cost` variable.
   std::vector<int> num_reassigned(n_thread_);
+  DType cost = 0.0;
 #pragma omp parallel num_threads(n_thread_)
   {
     int tid = omp_get_thread_num();
@@ -393,12 +460,12 @@ Status Kmeans<DType>::parallel_lloyd(std::vector<std::vector<DType>> &data,
     thread_centers_[tid].resize(n_cluster_);
     for (auto &tc : thread_centers_[tid])
       tc.resize(data[0].size());
-#pragma omp for reduction(+:total_cost)
+#pragma omp for reduction(+:cost)
     for (size_t i = 0; i < data.size(); ++i) {
       int label = 0;
       DType min_dist;
       predict(data[i], min_dist, label);
-      total_cost += min_dist;
+      cost += min_dist;
       thread_center_ids_[tid][label].push_back(static_cast<int>(i));
       if (label != labels_[i]) {
         num_reassigned[tid]++;
@@ -425,12 +492,15 @@ Status Kmeans<DType>::parallel_lloyd(std::vector<std::vector<DType>> &data,
       num_samples += static_cast<int>(thread_center_ids_[j][i].size());
     }
 
+    LOG(VERBOSE) << "cluster " << i << " #samples " << num_samples;
     if (num_samples > 1) {
       for (size_t k = 0; k < centers_[i].size(); ++k) {
         centers_[i][k] /= num_samples;
       }
     }
   }
+
+  total_cost = cost;
 
   return Status::OK;
 }

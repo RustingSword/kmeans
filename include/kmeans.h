@@ -23,7 +23,7 @@ class Kmeans {
     ~Kmeans(){}
 
     Status fit(const char *input_file);
-    Status fit(std::vector<std::vector<DType>> &data);
+    Status fit(std::vector<std::vector<DType>> &data, bool seeded = false);
 
     Status predict(std::vector<DType> &data_point, DType &min_dist, int &label);
     Status predict(std::vector<std::vector<DType>> &data_points,
@@ -58,12 +58,24 @@ class Kmeans {
       return Status::OK;
     }
 
+    Status set_init_method(InitMethod init, int l, int r) {
+      assert(init == InitMethod::KMEANS_PARALLEL);
+      LOG(INFO) << "set init method to " << init_methods[static_cast<int>(init)]
+        << ", l = " << l << ", r = " << r;
+      init_ = init;
+      kmeans_parallel_l_ = l;
+      kmeans_parallel_r_ = r;
+      return Status::OK;
+    }
+
   private:
     int n_cluster_;
     int n_thread_;
     int n_iter_;
     float threshold_;
     InitMethod init_;
+    int kmeans_parallel_l_;
+    int kmeans_parallel_r_;
     std::vector<std::vector<DType>> centers_;
     std::vector<std::vector<std::vector<DType>>> thread_centers_;
     std::vector<std::vector<int>> center_ids_;

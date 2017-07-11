@@ -65,12 +65,12 @@ class Log {
     inline std::string get_level(LogLevel level) {
       std::string label;
       switch (level) {
-        case VERBOSE: label = "VERBOSE"; break;
-        case DEBUG:   label = "DEBUG  "; break;
-        case INFO:    label = "INFO   "; break;
-        case WARN:    label = "WARN   "; break;
-        case ERROR:   label = "ERROR  "; break;
-        case NONE:    label = "NONE   "; break;
+        case VERBOSE: label = "V"; break;
+        case DEBUG:   label = "D"; break;
+        case INFO:    label = "I"; break;
+        case WARN:    label = "W"; break;
+        case ERROR:   label = "E"; break;
+        case NONE:    break;
       }
       return label;
     }

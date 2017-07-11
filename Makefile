@@ -1,6 +1,6 @@
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S), Darwin)
-	CXX = g++-6
+	CXX = g++-7
 else
 	CXX = g++
 endif
@@ -10,7 +10,7 @@ INCLUDEFLAGS = -I include
 INCLUDE_DIR = include
 BIN_DIR = bin
 SRC_DIR = src
-TEST_DIR = test
+TEST_DIR = tests
 
 HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)

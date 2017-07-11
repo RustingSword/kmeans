@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
             "integers";
         return -1;
     }
-    if (num_cluster > 10) {
-        kmeans.set_init_method(cluster::InitMethod::RANDOM);
+    if (num_cluster >= 10) {
+        kmeans.set_init_method(cluster::InitMethod::KMEANS_PARALLEL, 2 * num_cluster, 5);
     }
     kmeans.set_num_cluster(num_cluster);
     kmeans.set_num_threads(num_threads);
